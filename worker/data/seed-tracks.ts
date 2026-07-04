@@ -44,8 +44,8 @@ export const SEED_TRACKS: SeedTrack[] = [
       baseLoop: 'base_track.mp3',
       playback: { loop: false, restartCrossfadeSec: 5 },
       chimePool: [
-        { id: 'marimba-tap', file: 'chimes/marimba-tap.mp3', visualEvent: 'flare', intensity: 0.65 },
-        { id: 'bright-tone', file: 'chimes/bright-tone.mp3', visualEvent: 'flare', intensity: 0.55 },
+        { id: 'soft-morning-bell', file: 'chimes/soft-morning-bell.mp3', visualEvent: 'flare', intensity: 0.5 },
+        { id: 'gentle-wind-chime', file: 'chimes/gentle-wind-chime.mp3', visualEvent: 'flare', intensity: 0.45 },
       ],
       schedule: { minIntervalSec: 30, maxIntervalSec: 120 },
     },
@@ -59,7 +59,7 @@ export const SEED_TRACKS: SeedTrack[] = [
       baseLoop: 'base_track.mp3',
       playback: { loop: false, restartCrossfadeSec: 5 },
       chimePool: [
-        { id: 'warm-chime', file: 'chimes/warm-chime.mp3', visualEvent: 'flare', intensity: 0.5 },
+        { id: 'gentle-morning-bell', file: 'chimes/gentle-morning-bell.mp3', visualEvent: 'flare', intensity: 0.45 },
       ],
       schedule: { minIntervalSec: 40, maxIntervalSec: 140 },
     },

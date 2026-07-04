@@ -25,6 +25,7 @@ interface GenerateOptions {
   apiKey: string;
   dryRun: boolean;
   baseOnly: boolean;
+  chimesOnly: boolean;
   engine: 'auto' | 'music' | 'sfx-stitch';
 }
 
@@ -261,7 +262,10 @@ const CHIME_PROMPTS: Record<string, string[]> = {
     'soft distant bell chime, ethereal, sleep inducing',
     'gentle wind chime, single strike, reverb tail',
   ],
-  sunrise: ['bright marimba tap, warm morning tone', 'gentle uplifting chime, golden sunrise feeling'],
+  sunrise: [
+    'soft wind chime, single gentle bell strike, peaceful morning awakening, long reverb tail, not percussive, not electronic',
+    'light temple bell, warm distant morning tone, soft and calming, no alarm, no notification sound',
+  ],
   day: ['Tibetan singing bowl strike, meditation', 'soft meditation gong, single hit, long decay'],
 };
 
@@ -279,7 +283,13 @@ function loadEnvFile(): void {
   }
 }
 
-function parseArgs(): { milieu?: string; tracks?: string[]; baseOnly: boolean; engine: GenerateOptions['engine'] } {
+function parseArgs(): {
+  milieu?: string;
+  tracks?: string[];
+  baseOnly: boolean;
+  chimesOnly: boolean;
+  engine: GenerateOptions['engine'];
+} {
   const args = process.argv.slice(2);
   const milieu = args.find((a) => a.startsWith('--milieu='))?.split('=')[1];
   const tracks = args
@@ -288,10 +298,11 @@ function parseArgs(): { milieu?: string; tracks?: string[]; baseOnly: boolean; e
     ?.split(',')
     .filter(Boolean);
   const baseOnly = args.includes('--base-only');
+  const chimesOnly = args.includes('--chimes-only');
   const engineArg = args.find((a) => a.startsWith('--engine='))?.split('=')[1];
   const engine =
     engineArg === 'music' || engineArg === 'sfx-stitch' || engineArg === 'auto' ? engineArg : 'auto';
-  return { milieu, tracks, baseOnly, engine };
+  return { milieu, tracks, baseOnly, chimesOnly, engine };
 }
 
 function filterTracks(milieu?: string, trackIds?: string[]): SeedTrack[] {
@@ -443,11 +454,11 @@ async function generateTrackFiles(track: SeedTrack, options: GenerateOptions): P
   if (options.dryRun) {
     const musicConfig = MUSIC_BY_TRACK[track.manifest.id];
     const stitchCount = SFX_STITCH_SEGMENTS[track.manifest.id]?.length ?? 0;
-    if (musicConfig) {
+    if (musicConfig && !options.chimesOnly) {
       const totalSec = musicConfig.compositionPlan.chunks.reduce((s, c) => s + c.duration_ms, 0) / 1000;
       console.log(`  [dry-run] Music API: ${totalSec}s → ${track.manifest.baseLoop}`);
     }
-    if (stitchCount) {
+    if (stitchCount && !options.chimesOnly) {
       console.log(`  [dry-run] SFX stitch fallback: ${stitchCount} × 30s → ${track.manifest.baseLoop}`);
     }
     if (!options.baseOnly) {
@@ -459,8 +470,10 @@ async function generateTrackFiles(track: SeedTrack, options: GenerateOptions): P
     return;
   }
 
-  const method = await generateBaseTrack(track, options.apiKey, options.engine);
-  console.log(`  Base track method: ${method}`);
+  if (!options.chimesOnly) {
+    const method = await generateBaseTrack(track, options.apiKey, options.engine);
+    console.log(`  Base track method: ${method}`);
+  }
 
   if (!options.baseOnly) {
     const chimePrompts = CHIME_PROMPTS[track.manifest.milieu];
@@ -484,14 +497,16 @@ function uploadFile(key: string, filePath: string, contentType: string): void {
   );
 }
 
-async function uploadTrack(track: SeedTrack, baseOnly: boolean): Promise<void> {
+async function uploadTrack(track: SeedTrack, baseOnly: boolean, chimesOnly: boolean): Promise<void> {
   const trackDir = join(OUT_DIR, track.prefix);
 
   uploadFile(`${track.prefix}/manifest.json`, join(trackDir, 'manifest.json'), 'application/json');
 
-  const basePath = join(trackDir, track.manifest.baseLoop);
-  if (existsSync(basePath)) {
-    uploadFile(`${track.prefix}/${track.manifest.baseLoop}`, basePath, 'audio/mpeg');
+  if (!chimesOnly) {
+    const basePath = join(trackDir, track.manifest.baseLoop);
+    if (existsSync(basePath)) {
+      uploadFile(`${track.prefix}/${track.manifest.baseLoop}`, basePath, 'audio/mpeg');
+    }
   }
 
   if (!baseOnly) {
@@ -509,7 +524,7 @@ async function uploadTrack(track: SeedTrack, baseOnly: boolean): Promise<void> {
 async function main(): Promise<void> {
   loadEnvFile();
 
-  const { milieu, tracks: trackIds, baseOnly, engine } = parseArgs();
+  const { milieu, tracks: trackIds, baseOnly, chimesOnly, engine } = parseArgs();
   const selected = filterTracks(milieu, trackIds);
 
   if (selected.length === 0) {
@@ -527,10 +542,11 @@ async function main(): Promise<void> {
   console.log(`Tracks: ${selected.map((t) => t.manifest.id).join(', ')}`);
   console.log(`Engine: ${engine}`);
   if (baseOnly) console.log('Base-only mode: skipping chime generation');
+  if (chimesOnly) console.log('Chimes-only mode: skipping base track generation');
 
   for (const track of selected) {
-    await generateTrackFiles(track, { apiKey: apiKey ?? '', dryRun, baseOnly, engine });
-    if (!dryRun) await uploadTrack(track, baseOnly);
+    await generateTrackFiles(track, { apiKey: apiKey ?? '', dryRun, baseOnly, chimesOnly, engine });
+    if (!dryRun) await uploadTrack(track, baseOnly, chimesOnly);
   }
 
   const index = SEED_TRACKS.map(({ manifest }) => ({

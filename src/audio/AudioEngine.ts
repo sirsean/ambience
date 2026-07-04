@@ -15,7 +15,7 @@ export class AudioEngine {
   private currentManifest: TrackManifest | null = null;
   private trackPrefix = '';
   private milieu: Milieu = 'day';
-  private targetGain = 0.55;
+  private targetGain = 0.6875;
   private currentGain = 0;
   private playbackGeneration = 0;
 
