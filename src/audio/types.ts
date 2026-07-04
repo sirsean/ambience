@@ -57,4 +57,10 @@ export interface WeatherModifiers {
   streakIntensity: number;
   glowSharpness: number;
   humidityBlur: number;
+  /** RGB offset blended into day palette based on conditions */
+  colorTint: readonly [number, number, number];
+  /** Brightness multiplier for day coloring */
+  brightness: number;
+  /** 0 = cool blue, 1 = warmer sky (clear/sunny) */
+  warmth: number;
 }

@@ -81,6 +81,9 @@ export function createDefaultVisualState(): VisualState {
       streakIntensity: 0,
       glowSharpness: 1,
       humidityBlur: 0,
+      colorTint: [0, 0, 0],
+      brightness: 1,
+      warmth: 0,
     },
     time: 0,
   };

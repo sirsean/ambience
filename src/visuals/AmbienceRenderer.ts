@@ -40,6 +40,9 @@ export class AmbienceRenderer {
         streakIntensity: 0,
         glowSharpness: 1,
         humidityBlur: 0,
+        colorTint: [0, 0, 0],
+        brightness: 1,
+        warmth: 0,
       },
       time: 0,
     };
@@ -73,6 +76,9 @@ export class AmbienceRenderer {
         uGlowSharpness: { value: 1 },
         uHumidityBlur: { value: 0 },
         uMilieuStyle: { value: 2 },
+        uWeatherTint: { value: new THREE.Vector3(0, 0, 0) },
+        uWeatherBrightness: { value: 1 },
+        uWeatherWarmth: { value: 0 },
       },
     });
 
@@ -144,6 +150,9 @@ export class AmbienceRenderer {
     this.material.uniforms.uGlowSharpness.value = weather.glowSharpness;
     this.material.uniforms.uHumidityBlur.value = weather.humidityBlur;
     this.material.uniforms.uMilieuStyle.value = milieuStyle;
+    this.material.uniforms.uWeatherTint.value.set(...weather.colorTint);
+    this.material.uniforms.uWeatherBrightness.value = weather.brightness;
+    this.material.uniforms.uWeatherWarmth.value = weather.warmth;
 
     this.renderer.render(this.scene, this.camera);
   };

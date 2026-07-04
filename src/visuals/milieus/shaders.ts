@@ -1,7 +1,7 @@
 export const milieuColors = {
   night: { primary: [0.05, 0.04, 0.15] as const, accent: [0.3, 0.2, 0.6] as const },
   sunrise: { primary: [0.25, 0.08, 0.05] as const, accent: [1.0, 0.55, 0.15] as const },
-  day: { primary: [0.04, 0.12, 0.14] as const, accent: [0.3, 0.65, 0.55] as const },
+  day: { primary: [0.03, 0.08, 0.22] as const, accent: [0.15, 0.42, 0.78] as const },
 };
 
 export const vertexShader = /* glsl */ `
@@ -32,6 +32,9 @@ export const fragmentShader = /* glsl */ `
   uniform float uGlowSharpness;
   uniform float uHumidityBlur;
   uniform float uMilieuStyle;
+  uniform vec3 uWeatherTint;
+  uniform float uWeatherBrightness;
+  uniform float uWeatherWarmth;
 
   varying vec2 vUv;
 
@@ -110,7 +113,12 @@ export const fragmentShader = /* glsl */ `
       col += vec3(1.0, 0.75, 0.28) * max(0.0, centered.y + 0.1) * 0.2;
     } else {
       float rings = sin(length(centered) * 24.0 - uTime * 0.4) * 0.5 + 0.5;
-      col += uColorD * rings * 0.12;
+      col += uColorD * rings * 0.1;
+
+      col *= uWeatherBrightness;
+      col += uWeatherTint;
+      vec3 warmSky = vec3(0.18, 0.14, 0.06);
+      col = mix(col, col + warmSky, uWeatherWarmth);
     }
 
     col = mix(col, col * (1.0 + ripple * 0.12) + uColorB * ripple * 0.08, clamp(uChimeBurst, 0.0, 1.0));
