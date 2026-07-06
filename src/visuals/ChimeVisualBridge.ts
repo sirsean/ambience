@@ -29,20 +29,8 @@ export class ChimeVisualBridge {
     };
     this.ripplePhase = 0;
 
-    if (event.milieu === 'night') {
-      this.burst = Math.min(0.28, event.intensity * 0.18 + 0.06);
-      this.burstDecay = 0.988;
-      this.chimeStyle = 0;
-      return;
-    }
-
-    if (event.milieu === 'sunrise') {
-      this.burst = Math.min(0.65, event.intensity * 0.5 + 0.2);
-      this.burstDecay = 0.972;
-    } else {
-      this.burst = Math.min(0.55, event.intensity * 0.4 + 0.15);
-      this.burstDecay = 0.965;
-    }
+    this.burst = Math.min(1.0, event.intensity * 0.55 + 0.4);
+    this.burstDecay = event.milieu === 'night' ? 0.984 : 0.978;
 
     this.chimeStyle =
       event.visualEvent === 'flare' ? 1 : event.visualEvent === 'pulse' ? 2 : 0;
@@ -50,7 +38,8 @@ export class ChimeVisualBridge {
 
   update(): ChimeVisualState {
     if (this.burst > 0) {
-      this.ripplePhase += 0.04 + this.burst * 0.06;
+      const speed = this.chimeStyle === 1 ? 0.14 : this.chimeStyle === 2 ? 0.24 : 0.2;
+      this.ripplePhase += speed + this.burst * 0.1;
     }
 
     this.burst *= this.burstDecay;
@@ -61,7 +50,7 @@ export class ChimeVisualBridge {
 
     return {
       burst: this.burst,
-      style: this.chimeStyle * this.burst,
+      style: this.chimeStyle,
       center: this.center,
       ripplePhase: this.ripplePhase,
     };

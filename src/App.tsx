@@ -10,6 +10,8 @@ import { milieuLabel, useMilieu } from './hooks/useMilieu';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useWeather } from './hooks/useWeather';
 import { fetchTrackManifest, fetchTracks } from './lib/api';
+import { exposeAmbienceConsole } from './lib/ambienceConsole';
+import { audioLog } from './audio/audioLog';
 import './styles/app.css';
 
 const TRACK_STORAGE_KEY = 'ambience-selected-track';
@@ -36,6 +38,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [audioEngine, setAudioEngine] = useState<AudioEngine | null>(null);
+  const audioEngineRef = useRef<AudioEngine | null>(null);
   const prevMilieuRef = useRef<Milieu>(milieuState.milieu);
 
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,25 +68,26 @@ export default function App() {
       .catch(() => setError('Could not load tracks'));
   }, []);
 
-  const loadAndPlay = useCallback(
-    async (trackId: string, milieu: Milieu) => {
-      try {
-        let engine = audioEngine;
-        if (!engine) {
-          engine = new AudioEngine();
-          setAudioEngine(engine);
-        }
-        const { manifest, prefix } = await fetchTrackManifest(trackId);
-        await engine.start(manifest, prefix, milieu);
-        setSelectedTrackId(trackId);
-        storeTrack(trackId);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load track');
+  const loadAndPlay = useCallback(async (trackId: string, milieu: Milieu, reason: string) => {
+    audioLog('Track change requested', { trackId, milieu, reason });
+    try {
+      let engine = audioEngineRef.current;
+      if (!engine) {
+        engine = new AudioEngine();
+        audioEngineRef.current = engine;
+        setAudioEngine(engine);
       }
-    },
-    [audioEngine],
-  );
+      const { manifest, prefix } = await fetchTrackManifest(trackId);
+      await engine.start(manifest, prefix, milieu, { reason });
+      setSelectedTrackId(trackId);
+      storeTrack(trackId);
+      setError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load track';
+      audioLog('Track change FAILED', { trackId, milieu, reason, error: message });
+      setError(message);
+    }
+  }, []);
 
   const handleStart = async () => {
     setStarted(true);
@@ -94,32 +98,26 @@ export default function App() {
         : milieuTracks[0]?.id ?? tracks[0]?.id;
 
     if (trackId) {
-      await loadAndPlay(trackId, milieuState.milieu);
+      await loadAndPlay(trackId, milieuState.milieu, 'enter');
     }
   };
 
   const handleTrackSelect = async (id: string) => {
     if (!started) return;
-    await loadAndPlay(id, milieuState.milieu);
+    await loadAndPlay(id, milieuState.milieu, 'user-select');
     setTrackPickerOpen(false);
   };
 
   useEffect(() => {
     if (!started || !audioEngine) return;
 
+    exposeAmbienceConsole({
+      triggerChime: (overrides) => audioEngine.triggerChime(overrides),
+    });
+
     audioEngine.setMilieu(milieuState.milieu);
-
-    if (prevMilieuRef.current !== milieuState.milieu && milieuState.blendT < 0.05) {
-      audioEngine.crossfadeMilieu();
-      const milieuTracks = tracks.filter((t) => t.milieu === milieuState.milieu);
-      const currentStillValid = selectedTrackId && milieuTracks.some((t) => t.id === selectedTrackId);
-      if (!currentStillValid && milieuTracks[0]) {
-        loadAndPlay(milieuTracks[0].id, milieuState.milieu);
-      }
-    }
-
     prevMilieuRef.current = milieuState.milieu;
-  }, [milieuState, started, tracks, selectedTrackId, loadAndPlay, audioEngine]);
+  }, [milieuState.milieu, started, audioEngine]);
 
   if (!started) {
     return (

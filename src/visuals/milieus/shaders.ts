@@ -70,16 +70,6 @@ export const fragmentShader = /* glsl */ `
     return mix(color, vec3(l), amount);
   }
 
-  float pondRipple(vec2 uv, vec2 center, float phase, float strength) {
-    vec2 delta = uv - center;
-    float r = length(delta);
-    float wave = sin(r * 28.0 - phase * 6.0) * 0.6
-               + sin(r * 28.0 - phase * 6.0 + 2.1) * 0.3
-               + sin(r * 28.0 - phase * 6.0 + 4.2) * 0.15;
-    float falloff = exp(-r * 3.5) * (1.0 - smoothstep(0.0, 0.55, r));
-    return wave * falloff * strength;
-  }
-
   void main() {
     vec2 uv = vUv;
     vec2 centered = uv - 0.5;
@@ -87,18 +77,76 @@ export const fragmentShader = /* glsl */ `
     float t = uTime * (0.12 + uMilieuStyle * 0.08);
     float breathe = 0.5 + 0.5 * sin(uTime * 0.35) + uAudioLevel * 0.2;
 
+    // Chime zone — style-specific motion and color computed below
+    vec2 chimeDelta = uv - uChimeCenter;
+    float chimeDist = length(chimeDelta);
+    float chimeAngle = atan(chimeDelta.y, chimeDelta.x);
+    float chimePhase = uChimeRipplePhase;
+    vec2 chimeDir = normalize(chimeDelta + 0.0001);
+
+    vec2 chimeWarpOffset = vec2(0.0);
+    vec3 chimeCol = vec3(0.0);
+    float chimeBlend = 0.0;
+
+    if (uChimeBurst > 0.001) {
+      if (uChimeStyle < 0.5) {
+        // Ripple — concentric water rings, cool palette, strong radial warp
+        float rings = sin(chimeDist * 48.0 - chimePhase * 16.0);
+        float ringBands = smoothstep(0.55, 0.0, abs(fract(chimeDist * 14.0 - chimePhase * 4.5) - 0.5));
+        float zone = exp(-chimeDist * 3.8) * uChimeBurst;
+
+        chimeWarpOffset = chimeDir * rings * 0.09 * zone;
+        vec2 rippleLocal = chimeDelta + chimeDir * rings * 0.14;
+        float rippleN = fbm(rippleLocal * 6.0 + vec2(chimePhase * 0.35));
+        vec3 coolA = mix(uColorB, vec3(0.2, 0.75, 0.95), 0.55);
+        vec3 coolB = mix(uColorD, vec3(0.45, 0.95, 1.0), 0.45);
+        chimeCol = mix(coolA * 1.3, coolB * 1.5, rippleN);
+        chimeCol += coolB * ringBands * 0.55;
+        chimeCol *= 0.8 + abs(rings) * 0.25;
+        chimeBlend = zone * (0.5 + ringBands * 0.45 + abs(rings) * 0.12);
+
+      } else if (uChimeStyle < 1.5) {
+        // Flare — hot radial bloom with soft rays, minimal ring structure
+        float bloom = exp(-chimeDist * 1.6) * uChimeBurst;
+        float hotCore = exp(-chimeDist * 10.0) * (0.7 + 0.3 * sin(chimePhase * 4.0));
+        float rays = pow(max(0.0, sin(chimeAngle * 6.0 + chimePhase * 1.5)), 3.0);
+        rays *= exp(-chimeDist * 2.2);
+        float warmN = fbm(chimeDelta * 3.5 + vec2(chimePhase * 0.12, chimePhase * 0.08));
+
+        chimeCol = mix(vec3(1.0, 0.35, 0.05), vec3(1.0, 0.72, 0.22), warmN);
+        chimeCol = mix(chimeCol, vec3(1.0, 0.95, 0.75), hotCore);
+        chimeCol += vec3(1.0, 0.88, 0.55) * rays * 0.45 * uChimeBurst;
+        chimeCol *= 0.85 + hotCore * 0.55;
+        chimeBlend = bloom * (0.65 + hotCore * 0.35 + rays * 0.15);
+
+      } else {
+        // Pulse — breathing radial bands that expand and contract
+        float breathe = 0.5 + 0.5 * sin(chimePhase * 10.0);
+        float expand = chimeDist - chimePhase * 0.08 * breathe;
+        float bands = sin(expand * 32.0) * 0.5 + 0.5;
+        float bandEdges = smoothstep(0.42, 0.0, abs(fract(expand * 9.0) - 0.5));
+        float zone = exp(-chimeDist * (2.2 - breathe * 0.6)) * uChimeBurst;
+
+        chimeWarpOffset = chimeDir * sin(chimePhase * 10.0) * 0.035 * zone;
+        vec3 bright = mix(uColorD, uColorB, 0.4) * 2.2;
+        vec3 dim = mix(uColorA, uColorC, 0.35) * 0.45;
+        chimeCol = mix(dim, bright, bands);
+        chimeCol = mix(chimeCol, bright * 1.3, bandEdges * breathe);
+        chimeCol *= 0.55 + breathe * 0.65;
+        chimeBlend = zone * (0.45 + bandEdges * 0.5 + bands * 0.2);
+      }
+
+      chimeBlend = clamp(chimeBlend * smoothstep(0.6, 0.0, chimeDist), 0.0, 0.94);
+    }
+
     vec2 flow = vec2(
       fbm(centered * 1.8 + vec2(t * 0.04, t * 0.03)),
       fbm(centered * 1.8 + vec2(4.1, 2.7) + vec2(-t * 0.03, t * 0.05))
     );
-    vec2 warped = centered + (flow - 0.5) * 0.35;
+    vec2 warped = centered + (flow - 0.5) * 0.35 + chimeWarpOffset;
 
     float n = fbm(warped * (2.2 + uParticleDensity * 0.3) + vec2(t * 0.08, t * 0.06));
     float n2 = fbm(warped * 3.5 - vec2(t * 0.05, t * 0.09));
-
-    float ripple = pondRipple(uv, uChimeCenter, uChimeRipplePhase, uChimeBurst);
-    vec2 rippleWarp = normalize(uv - uChimeCenter + 0.0001) * ripple * 0.018;
-    float nRipple = fbm((warped + rippleWarp) * 2.5 + vec2(t * 0.07));
 
     vec3 col = mix(uColorA, uColorB, n);
     col = mix(col, uColorC, n2 * breathe);
@@ -121,13 +169,7 @@ export const fragmentShader = /* glsl */ `
       col = mix(col, col + warmSky, uWeatherWarmth);
     }
 
-    col = mix(col, col * (1.0 + ripple * 0.12) + uColorB * ripple * 0.08, clamp(uChimeBurst, 0.0, 1.0));
-    col = mix(col, mix(uColorA, uColorC, nRipple), abs(ripple) * 0.35 * uChimeBurst);
-
-    if (uChimeStyle > 0.5 && uChimeStyle < 1.5 && uChimeBurst > 0.01) {
-      float local = pondRipple(uv, uChimeCenter, uChimeRipplePhase, uChimeBurst);
-      col += vec3(1.0, 0.7, 0.35) * max(0.0, local) * 0.12;
-    }
+    col = mix(col, chimeCol, chimeBlend);
 
     if (uStreakIntensity > 0.01) {
       float rain = fbm(uv * vec2(8.0, 40.0) + vec2(-t * 0.6, t * 1.2));

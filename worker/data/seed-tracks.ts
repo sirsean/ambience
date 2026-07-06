@@ -13,7 +13,7 @@ export const SEED_TRACKS: SeedTrack[] = [
       name: 'Deep Calm',
       milieu: 'night',
       baseLoop: 'base_track.mp3',
-      playback: { loop: false, restartCrossfadeSec: 5 },
+      playback: { loop: true, restartCrossfadeSec: 5 },
       chimePool: [
         { id: 'soft-bell-1', file: 'chimes/soft-bell-1.mp3', visualEvent: 'ripple', intensity: 0.5 },
         { id: 'distant-chime', file: 'chimes/distant-chime.mp3', visualEvent: 'ripple', intensity: 0.35 },
@@ -28,7 +28,7 @@ export const SEED_TRACKS: SeedTrack[] = [
       name: 'Starry Drone',
       milieu: 'night',
       baseLoop: 'base_track.mp3',
-      playback: { loop: false, restartCrossfadeSec: 5 },
+      playback: { loop: true, restartCrossfadeSec: 5 },
       chimePool: [
         { id: 'soft-bell-2', file: 'chimes/soft-bell-2.mp3', visualEvent: 'pulse', intensity: 0.4 },
       ],
@@ -42,7 +42,7 @@ export const SEED_TRACKS: SeedTrack[] = [
       name: 'Golden Awake',
       milieu: 'sunrise',
       baseLoop: 'base_track.mp3',
-      playback: { loop: false, restartCrossfadeSec: 5 },
+      playback: { loop: true, restartCrossfadeSec: 5 },
       chimePool: [
         { id: 'soft-morning-bell', file: 'chimes/soft-morning-bell.mp3', visualEvent: 'flare', intensity: 0.5 },
         { id: 'gentle-wind-chime', file: 'chimes/gentle-wind-chime.mp3', visualEvent: 'flare', intensity: 0.45 },
@@ -57,7 +57,7 @@ export const SEED_TRACKS: SeedTrack[] = [
       name: 'Early Light',
       milieu: 'sunrise',
       baseLoop: 'base_track.mp3',
-      playback: { loop: false, restartCrossfadeSec: 5 },
+      playback: { loop: true, restartCrossfadeSec: 5 },
       chimePool: [
         { id: 'gentle-morning-bell', file: 'chimes/gentle-morning-bell.mp3', visualEvent: 'flare', intensity: 0.45 },
       ],
@@ -71,7 +71,7 @@ export const SEED_TRACKS: SeedTrack[] = [
       name: 'Zen Garden',
       milieu: 'day',
       baseLoop: 'base_track.mp3',
-      playback: { loop: false, restartCrossfadeSec: 5 },
+      playback: { loop: true, restartCrossfadeSec: 5 },
       chimePool: [
         { id: 'singing-bowl', file: 'chimes/singing-bowl.mp3', visualEvent: 'pulse', intensity: 0.55 },
         { id: 'soft-gong', file: 'chimes/soft-gong.mp3', visualEvent: 'ripple', intensity: 0.45 },
@@ -86,7 +86,7 @@ export const SEED_TRACKS: SeedTrack[] = [
       name: 'Contemplation',
       milieu: 'day',
       baseLoop: 'base_track.mp3',
-      playback: { loop: false, restartCrossfadeSec: 5 },
+      playback: { loop: true, restartCrossfadeSec: 5 },
       chimePool: [
         { id: 'meditation-bell', file: 'chimes/meditation-bell.mp3', visualEvent: 'pulse', intensity: 0.5 },
       ],
