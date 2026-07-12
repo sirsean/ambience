@@ -1,4 +1,4 @@
-import type { ChimeDefinition, ChimeEvent, Milieu, TrackManifest } from './types';
+import type { ChimeDefinition, ChimeEvent, Milieu } from './types';
 import { audioLog } from './audioLog';
 
 type ChimeListener = (event: ChimeEvent) => void;
@@ -9,15 +9,23 @@ const CHIME_VOLUME: Record<Milieu, number> = {
   day: 0.1,
 };
 
+export interface ChimeSource {
+  id: string;
+  definition: ChimeDefinition;
+  prefix: string;
+}
+
 export class ChimeScheduler {
   private readonly context: AudioContext;
   private readonly destination: AudioNode;
-  private chimePool: ChimeDefinition[] = [];
+  private allSources: ChimeSource[] = [];
+  private defaultChimeIds: string[] = [];
+  private activeChimeIds: string[] | null = null;
   private scheduleConfig = { minIntervalSec: 60, maxIntervalSec: 120 };
   private milieu: Milieu = 'day';
-  private trackPrefix = '';
   private trackId = '';
   private buffers = new Map<string, AudioBuffer>();
+  private volumeMultiplier = 1;
   private timeoutId: ReturnType<typeof setTimeout> | null = null;
   private running = false;
   private listeners = new Set<ChimeListener>();
@@ -32,34 +40,42 @@ export class ChimeScheduler {
     return () => this.listeners.delete(listener);
   }
 
-  async configure(
-    manifest: TrackManifest,
-    trackPrefix: string,
-    milieu: Milieu,
+  setVolumeMultiplier(multiplier: number): void {
+    this.volumeMultiplier = Math.min(1, Math.max(0, multiplier));
+  }
+
+  setActiveChimes(ids: string[] | null): void {
+    this.activeChimeIds = ids;
+  }
+
+  async setSources(
+    sources: ChimeSource[],
+    defaultIds: string[],
+    schedule: { minIntervalSec: number; maxIntervalSec: number },
   ): Promise<Array<{ id: string; ok: boolean; error?: string }>> {
-    this.stop();
-    this.chimePool = manifest.chimePool;
-    this.scheduleConfig = manifest.schedule;
-    this.trackPrefix = trackPrefix;
-    this.trackId = manifest.id;
-    this.milieu = milieu;
-    this.buffers.clear();
+    this.allSources = sources;
+    this.defaultChimeIds = defaultIds;
+    this.scheduleConfig = schedule;
 
     const results = await Promise.all(
-      manifest.chimePool.map(async (chime) => {
-        const url = `/api/audio/${trackPrefix}/${chime.file}`;
+      sources.map(async (source) => {
+        if (this.buffers.has(source.id)) {
+          return { id: source.id, ok: true };
+        }
+
+        const url = `/api/audio/${source.prefix}/${source.definition.file}`;
         try {
           const response = await fetch(url);
           if (!response.ok) {
-            return { id: chime.id, ok: false, error: `HTTP ${response.status}` };
+            return { id: source.id, ok: false, error: `HTTP ${response.status}` };
           }
           const arrayBuffer = await response.arrayBuffer();
           const buffer = await this.context.decodeAudioData(arrayBuffer.slice(0));
-          this.buffers.set(chime.id, buffer);
-          return { id: chime.id, ok: true };
+          this.buffers.set(source.id, buffer);
+          return { id: source.id, ok: true };
         } catch (err) {
           return {
-            id: chime.id,
+            id: source.id,
             ok: false,
             error: err instanceof Error ? err.message : String(err),
           };
@@ -70,7 +86,7 @@ export class ChimeScheduler {
     for (const result of results) {
       if (!result.ok) {
         audioLog('Chime load FAILED — will skip audio (visual only)', {
-          trackId: manifest.id,
+          trackId: this.trackId,
           chimeId: result.id,
           error: result.error,
         });
@@ -80,8 +96,21 @@ export class ChimeScheduler {
     return results;
   }
 
+  async configure(
+    trackId: string,
+    milieu: Milieu,
+    sources: ChimeSource[],
+    defaultIds: string[],
+    schedule: { minIntervalSec: number; maxIntervalSec: number },
+  ): Promise<Array<{ id: string; ok: boolean; error?: string }>> {
+    this.stop();
+    this.trackId = trackId;
+    this.milieu = milieu;
+    return this.setSources(sources, defaultIds, schedule);
+  }
+
   start(): void {
-    if (this.running || this.chimePool.length === 0) return;
+    if (this.running || this.getActivePool().length === 0) return;
     this.running = true;
     this.scheduleNext();
   }
@@ -98,17 +127,30 @@ export class ChimeScheduler {
     this.milieu = milieu;
   }
 
+  getDefaultChimeIds(): string[] {
+    return [...this.defaultChimeIds];
+  }
+
+  private getActivePool(): ChimeSource[] {
+    const ids = this.activeChimeIds ?? this.defaultChimeIds;
+    if (ids.length === 0) return [];
+    const idSet = new Set(ids);
+    return this.allSources.filter((s) => idSet.has(s.id));
+  }
+
   fireChime(overrides?: Partial<Pick<ChimeDefinition, 'visualEvent' | 'intensity'>>): void {
-    if (this.chimePool.length === 0) return;
+    const pool = this.getActivePool();
+    if (pool.length === 0) return;
 
-    const chime =
-      this.chimePool.find((c) => c.visualEvent === overrides?.visualEvent) ??
-      this.chimePool[Math.floor(Math.random() * this.chimePool.length)];
+    const source =
+      pool.find((s) => s.definition.visualEvent === overrides?.visualEvent) ??
+      pool[Math.floor(Math.random() * pool.length)];
 
+    const chime = source.definition;
     const visualEvent = overrides?.visualEvent ?? chime.visualEvent;
     const intensity = overrides?.intensity ?? chime.intensity;
     const buffer = this.buffers.get(chime.id);
-    const volume = CHIME_VOLUME[this.milieu] * intensity;
+    const volume = CHIME_VOLUME[this.milieu] * intensity * this.volumeMultiplier;
 
     const emit = () => {
       const event: ChimeEvent = {
@@ -129,13 +171,13 @@ export class ChimeScheduler {
         volume: volume.toFixed(3),
         durationSec: buffer.duration.toFixed(2),
       });
-      const source = this.context.createBufferSource();
       const gain = this.context.createGain();
-      source.buffer = buffer;
+      const sourceNode = this.context.createBufferSource();
+      sourceNode.buffer = buffer;
       gain.gain.value = volume;
-      source.connect(gain);
+      sourceNode.connect(gain);
       gain.connect(this.destination);
-      source.start();
+      sourceNode.start();
       emit();
       return;
     }

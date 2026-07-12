@@ -1,4 +1,4 @@
-import { ChimeScheduler } from './ChimeScheduler';
+import { ChimeScheduler, type ChimeSource } from './ChimeScheduler';
 import { audioLog } from './audioLog';
 import { bufferPeak, normalizeAudioBuffer } from './normalizeBuffer';
 import type { ChimeEvent, Milieu, TrackManifest, VisualEvent } from './types';
@@ -24,6 +24,10 @@ export class AudioEngine {
   private currentManifest: TrackManifest | null = null;
   private trackPrefix = '';
   private milieu: Milieu = 'day';
+  private musicVolume = 1;
+  private chimeVolume = 1;
+  private activeChimeIds: string[] | null = null;
+  private milieuChimeSources: ChimeSource[] = [];
   private playbackGeneration = 0;
   private hasEntered = false;
 
@@ -74,8 +78,45 @@ export class AudioEngine {
     this.analyser.connect(this.context.destination);
 
     this.chimeScheduler = new ChimeScheduler(this.context, this.chimeGain);
+    this.chimeScheduler.setVolumeMultiplier(this.chimeVolume);
     this.wireChimeListeners();
+    this.applyLoopVolume();
     audioLog('AudioContext initialized');
+  }
+
+  setMusicVolume(volume: number): void {
+    this.musicVolume = Math.min(1, Math.max(0, volume));
+    this.applyLoopVolume();
+  }
+
+  setChimeVolume(volume: number): void {
+    this.chimeVolume = Math.min(1, Math.max(0, volume));
+    this.chimeScheduler?.setVolumeMultiplier(this.chimeVolume);
+  }
+
+  setActiveChimes(ids: string[] | null): void {
+    this.activeChimeIds = ids;
+    this.chimeScheduler?.setActiveChimes(ids);
+    this.restartChimeSchedulerIfNeeded();
+  }
+
+  setMilieuChimeSources(sources: ChimeSource[]): void {
+    this.milieuChimeSources = sources;
+  }
+
+  getDefaultChimeIds(): string[] {
+    return this.chimeScheduler?.getDefaultChimeIds() ?? [];
+  }
+
+  private applyLoopVolume(): void {
+    if (!this.loopGain) return;
+    this.loopGain.gain.value = this.musicVolume;
+  }
+
+  private restartChimeSchedulerIfNeeded(): void {
+    if (!this.chimeScheduler || !this.currentManifest) return;
+    this.chimeScheduler.stop();
+    this.chimeScheduler.start();
   }
 
   async start(
@@ -166,7 +207,25 @@ export class AudioEngine {
       this.startProceduralLoop();
     }
 
-    const chimeResults = await this.chimeScheduler.configure(manifest, trackPrefix, milieu);
+    const defaultIds = manifest.chimePool.map((c) => c.id);
+    const sources: ChimeSource[] =
+      this.milieuChimeSources.length > 0
+        ? this.milieuChimeSources
+        : manifest.chimePool.map((chime) => ({
+            id: chime.id,
+            definition: chime,
+            prefix: trackPrefix,
+          }));
+
+    const chimeResults = await this.chimeScheduler.configure(
+      manifest.id,
+      milieu,
+      sources,
+      defaultIds,
+      manifest.schedule,
+    );
+    this.chimeScheduler.setActiveChimes(this.activeChimeIds);
+    this.chimeScheduler.setVolumeMultiplier(this.chimeVolume);
     this.chimeScheduler.start();
     this.applyMasterGain(isFirstEnter, reason);
     this.hasEntered = true;
