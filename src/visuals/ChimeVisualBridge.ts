@@ -1,68 +1,82 @@
 import type { ChimeEvent, Milieu, WeatherModifiers } from '../audio/types';
+import { GLASS_PANE_COUNT } from './GlassGrid';
 
 export interface VisualState {
   audioLevel: number;
-  chimeBurst: number;
   milieuBlend: { from: Milieu; to: Milieu; t: number };
   weather: WeatherModifiers;
-  time: number;
 }
 
 export interface ChimeVisualState {
-  burst: number;
-  style: number;
-  center: { x: number; y: number };
-  ripplePhase: number;
+  pane: number;
+  amount: number;
+  sweep: number;
+  color: [number, number, number];
+}
+
+export const CHIME_DURATION_MS = 3600;
+
+const SHIMMER_COLORS = [
+  [0.3, 0.95, 0.9],
+  [0.85, 0.4, 0.95],
+  [1.0, 0.75, 0.3],
+] as const;
+
+function smoothstep(value: number): number {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
 }
 
 export class ChimeVisualBridge {
-  private burst = 0;
-  private burstDecay = 0.965;
-  private chimeStyle = 0;
-  private center = { x: 0.5, y: 0.5 };
-  private ripplePhase = 0;
+  private readonly state: ChimeVisualState = { pane: -1, amount: 0, sweep: 0, color: [0, 0, 0] };
+  private startedAt = 0;
+  private intensity = 0;
+  private colorOffset = 0;
+  private lastPane = -1;
 
-  trigger(event: ChimeEvent): void {
-    this.center = {
-      x: 0.1 + Math.random() * 0.8,
-      y: 0.1 + Math.random() * 0.8,
-    };
-    this.ripplePhase = 0;
-
-    this.burst = Math.min(1.0, event.intensity * 0.55 + 0.4);
-    this.burstDecay = event.milieu === 'night' ? 0.984 : 0.978;
-
-    this.chimeStyle =
-      event.visualEvent === 'flare' ? 1 : event.visualEvent === 'pulse' ? 2 : 0;
+  trigger(event: ChimeEvent, now = performance.now()): void {
+    // Avoid consecutive repeats without a retry loop, including after a pulse expires.
+    const random = Math.random();
+    this.lastPane = this.lastPane < 0
+      ? Math.floor(random * GLASS_PANE_COUNT)
+      : (this.lastPane + 1 + Math.floor(random * (GLASS_PANE_COUNT - 1))) % GLASS_PANE_COUNT;
+    this.state.pane = this.lastPane;
+    this.state.amount = 0;
+    this.startedAt = now;
+    this.intensity = 0.4 + Math.max(0, Math.min(1, event.intensity)) * 0.6;
+    this.colorOffset = event.visualEvent === 'flare' ? 2 : event.visualEvent === 'pulse' ? 1 : 0;
   }
 
-  update(): ChimeVisualState {
-    if (this.burst > 0) {
-      const speed = this.chimeStyle === 1 ? 0.14 : this.chimeStyle === 2 ? 0.24 : 0.2;
-      this.ripplePhase += speed + this.burst * 0.1;
+  update(now = performance.now()): ChimeVisualState {
+    if (this.state.pane < 0) return this.state;
+
+    const age = Math.max(0, now - this.startedAt);
+    if (age >= CHIME_DURATION_MS) {
+      this.state.pane = -1;
+      this.state.amount = 0;
+      return this.state;
     }
 
-    this.burst *= this.burstDecay;
-    if (this.burst < 0.001) {
-      this.burst = 0;
-      this.chimeStyle = 0;
-    }
+    const seconds = age / 1000;
+    const envelope = smoothstep(age / 220) * smoothstep((CHIME_DURATION_MS - age) / 1200);
+    this.state.amount = envelope * this.intensity * (0.82 + 0.18 * Math.sin(seconds * 3));
+    this.state.sweep = (seconds / 1.8) % 1.4 - 0.2;
 
-    return {
-      burst: this.burst,
-      style: this.chimeStyle,
-      center: this.center,
-      ripplePhase: this.ripplePhase,
-    };
+    const colorPhase = this.colorOffset + seconds * 0.85;
+    const index = Math.floor(colorPhase);
+    const blend = smoothstep(colorPhase - index);
+    const from = SHIMMER_COLORS[index % SHIMMER_COLORS.length];
+    const to = SHIMMER_COLORS[(index + 1) % SHIMMER_COLORS.length];
+    for (let channel = 0; channel < 3; channel++) {
+      this.state.color[channel] = from[channel] + (to[channel] - from[channel]) * blend;
+    }
+    return this.state;
   }
 }
-
-export type VisualStateListener = (state: VisualState) => void;
 
 export function createDefaultVisualState(): VisualState {
   return {
     audioLevel: 0,
-    chimeBurst: 0,
     milieuBlend: { from: 'day', to: 'day', t: 1 },
     weather: {
       desaturate: 0,
@@ -74,6 +88,5 @@ export function createDefaultVisualState(): VisualState {
       brightness: 1,
       warmth: 0,
     },
-    time: 0,
   };
 }

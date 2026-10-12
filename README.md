@@ -1,6 +1,6 @@
 # Ambience
 
-Time and weather-aware visual and audio ambience for the browser. Fullscreen, edge-to-edge WebGL visuals synchronized with layered audio that adapts to your local time of day and weather.
+Time and weather-aware visual and audio ambience for the browser. A fullscreen WebGL stained-glass grid accompanies layered audio that adapts to your local time of day and weather. Its 48 colored panes continuously exchange space, and each chime makes one pane shimmer for 3.6 seconds.
 
 ## Time periods
 
@@ -38,6 +38,19 @@ Upload generated files to R2:
 wrangler r2 object put ambience-audio/index.json --file=.generated-tracks/index.json
 # ... upload track folders from .generated-tracks/tracks/
 ```
+
+## Rendering and checks
+
+The renderer targets 30 frames per second with one instanced draw call. It caps pixel density at 1 and the drawing buffer at 1.25 million pixels, so a high-resolution screen does not multiply the GPU workload. Pane borders use lightweight shader smoothing instead of multisample antialiasing. Geometry and color buffers are reused; hidden tabs and zero-size containers suspend visual rendering while audio continues. Graphics contexts are restored automatically after a context loss.
+
+Day, sunrise, and night use distinct glass palettes. Weather changes brightness, saturation, and tint without adding particles or blur passes. Motion and chime durations follow elapsed time, including after dropped frames or a hidden-tab interval.
+
+```bash
+npm run test:visuals  # Grid coverage, motion, pulse timing, and pixel-budget tests
+npm test -- --run     # Production build, visual tests, and Worker tests
+```
+
+After entering the app, browser-console calls such as `window.__ambience.triggerChime({ visualEvent: 'ripple', intensity: 1 })` exercise a pane shimmer using the existing audio event path. The legacy `ripple`, `flare`, and `pulse` event names now select different starting shimmer colors.
 
 ## Deploy
 

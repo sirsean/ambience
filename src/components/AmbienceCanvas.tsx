@@ -42,7 +42,6 @@ export function AmbienceCanvas({ milieuState, weatherModifiers, audioEngine, act
     const renderer = rendererRef.current;
     if (!renderer) return;
 
-    renderer.setWeather(weatherModifiers);
     renderer.updateState({
       milieuBlend: {
         from: milieuState.previousMilieu,
@@ -51,22 +50,13 @@ export function AmbienceCanvas({ milieuState, weatherModifiers, audioEngine, act
       },
       weather: weatherModifiers,
     });
-  }, [milieuState, weatherModifiers]);
+  }, [milieuState, weatherModifiers, active]);
 
   useEffect(() => {
-    if (!active) return;
-    let frameId: number;
-
-    const tick = () => {
-      const renderer = rendererRef.current;
-      if (renderer && audioEngine) {
-        renderer.updateState({ audioLevel: audioEngine.audioLevel });
-      }
-      frameId = requestAnimationFrame(tick);
-    };
-
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    renderer.setAudioLevelSource(audioEngine ? () => audioEngine.audioLevel : null);
+    return () => renderer.setAudioLevelSource(null);
   }, [audioEngine, active]);
 
   return <div ref={containerRef} className="ambience-canvas" />;

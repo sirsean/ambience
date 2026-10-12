@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "test": "npm run build && vitest",
+    "test": "npm run build && npm run test:visuals && vitest",
+    "test:visuals": "vitest run --config vitest.visuals.config.ts",
     "cf-typegen": "wrangler types",
     "generate-tracks": "tsx scripts/generate-tracks.ts"
   },

@@ -2,5 +2,5 @@ export { milieuColors } from './shaders';
 
 export const sunrisePreset = {
   style: 1,
-  description: 'Orange to gold gradients, upward motion bias',
+  description: 'Amber, coral, rose, and gold stained-glass panes with shifting boundaries',
 } as const;
